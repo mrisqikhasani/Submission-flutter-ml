@@ -4,14 +4,22 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:submission_flutter_ml/model/meal_model.dart';
+import 'package:submission_flutter_ml/model/nutrition_model.dart';
+import 'package:submission_flutter_ml/services/gemini_services.dart';
+import 'package:submission_flutter_ml/services/http_service.dart';
 import 'package:submission_flutter_ml/services/image_recognizer_services.dart';
+import 'package:submission_flutter_ml/ui/detail_page.dart';
 import 'package:submission_flutter_ml/ui/result_page.dart';
 // import 'package:submission_flutter_ml/ui/camera_page.dart';
 
 class HomeController extends ChangeNotifier {
   final ImageRecognizerServices _services;
+  final HttpService _httpService;
+  final GeminiServices _geminiServices;
 
-  HomeController(this._services) {
+
+  HomeController(this._services, this._httpService, this._geminiServices) {
     _services.initialize();
   }
 
@@ -24,6 +32,19 @@ class HomeController extends ChangeNotifier {
   File? get image => _image;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  MealModel? _mealDetail;
+  bool _isDetailLoading = false;
+
+  MealModel? get mealDetail => _mealDetail;
+  bool get isDetailLoading => _isDetailLoading;
+
+  // gemini nutrions
+  NutritionData? _nutritionResult;
+  bool _isNutritionLoading = false;
+
+  NutritionData? get nutritionResult => _nutritionResult;
+  bool get isNutritionLoading => _isNutritionLoading;
 
   // ======================
   // STATE
@@ -139,7 +160,6 @@ class HomeController extends ChangeNotifier {
       _setLoading(true);
       _setError(null);
 
-      // 1. Jalankan Isolate Inference lewat service
       final results = await _services.recognizeFile(_image!);
 
       if (results.isEmpty) {
@@ -147,17 +167,22 @@ class HomeController extends ChangeNotifier {
         return;
       }
 
-      // 2. LOGIKA: Mencari skor tertinggi (Best Practice: Olah di Controller)
       final sorted = results.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
 
       final topResult = sorted.first;
-      final String label = topResult.key; // Ambil Nama Makanan
-      final double score = topResult.value; // Ambil Confidence Score
+      final String label = topResult.key; 
+      final double score = topResult.value;
 
-      log('Best Result: $label with score $score');
+      _isNutritionLoading = true;
+      _nutritionResult = null;
+      notifyListeners();
 
-      // 3. Navigasi: Kirim variabel label dan score saja ke ResultPage
+      final nutritionResult = await _geminiServices.getNutritionValue(label);
+      _nutritionResult = nutritionResult;
+      _isNutritionLoading = false;
+      notifyListeners();
+
       if (context.mounted) {
         Navigator.push(
           context,
@@ -175,6 +200,41 @@ class HomeController extends ChangeNotifier {
       _setError("Gagal menganalisis gambar: $e");
     } finally {
       _setLoading(false);
+      _isNutritionLoading = false;
+      notifyListeners();
     }
   }
+
+  Future<void> fetchMealDetail(String mealName) async {
+    try {
+      _isDetailLoading = true;
+      _mealDetail = null; // Reset data lama
+      notifyListeners();
+
+      final result = await _httpService.searchMealByName(mealName);
+      _mealDetail = result;
+    } catch (e) {
+      log("Error fetching detail: $e");
+    } finally {
+      _isDetailLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> goToDetailPage(BuildContext context, String foodName) async {
+  
+    await fetchMealDetail(foodName);
+  
+    if(context.mounted){
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DetailPage(),
+        ),
+      );
+    }
+  }
+
+
+  // gemini controller
 }

@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:submission_flutter_ml/controller/home_controller.dart';
+import 'package:submission_flutter_ml/model/nutrition_model.dart';
 import 'package:submission_flutter_ml/widget/classification_item.dart';
 
 class ResultPage extends StatelessWidget {
@@ -84,10 +87,73 @@ class _ResultBodyState extends State<_ResultBody> {
           padding: EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [Text("Food Name")],
+            children: [
+              context.watch<HomeController>().isNutritionLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _buildNutritionTable(
+                      context.watch<HomeController>().nutritionResult,
+                    ),
+            ],
           ),
         ),
+        const Divider(),
+        FilledButton.tonal(
+          onPressed: () {
+            context.read<HomeController>().goToDetailPage(
+              context,
+              widget.labelResult,
+            );
+          },
+          child: const Text("Detail"),
+        ),
       ],
+    );
+  }
+
+  Widget _buildNutritionTable(NutritionData? data) {
+    if (data == null) {
+      return const Text("Data nutrisi tidak tersedia saat ini.");
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.deepPurple.withOpacity(0.1)),
+      ),
+      child: Column(
+        children: [
+          _nutritionRow("Calories", data.calories),
+          const Divider(),
+          _nutritionRow("Carbs", data.carbs),
+          const Divider(),
+          _nutritionRow("Fat", data.fat),
+          const Divider(),
+          _nutritionRow("Fiber", data.fiber),
+          const Divider(),
+          _nutritionRow("Protein", data.protein),
+        ],
+      ),
+    );
+  }
+
+  Widget _nutritionRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+          Text(
+            value,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.deepPurple,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

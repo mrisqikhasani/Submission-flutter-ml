@@ -4,11 +4,17 @@ import 'dart:isolate';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
+import 'package:submission_flutter_ml/services/firebase_ml_service.dart';
 import 'package:submission_flutter_ml/services/isolate_inference.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 class ImageRecognizerServices {
-  final modelPath = 'assets/vision-classifier.tflite';
+  // final FirebaseMlService _mlService;
+
+  // ImageRecognizerServices(this._mlService);
+
+  final modelPath = 'assets/vision-classifier-food-v1.tflite';
+  // late final File modelFile;
   final labelsPath = 'assets/probability-labels-en.txt';
 
   late Interpreter interpreter;
@@ -19,11 +25,14 @@ class ImageRecognizerServices {
 
 
   Future<void> _loadModel() async {
+    // modelFile = await _mlService.loadModel();
+
     final options = InterpreterOptions()
     ..useNnApiForAndroid = true
     ..useMetalDelegateForIOS  = true;
 
-    interpreter = await Interpreter.fromAsset(modelPath, options: options);
+    // interpreter =  Interpreter.fromFile(modelFile, options: options);
+    interpreter =  await Interpreter.fromAsset(modelPath, options: options);
 
     inputTensor = interpreter.getInputTensors().first;
     outputTensor = interpreter.getOutputTensors().first;

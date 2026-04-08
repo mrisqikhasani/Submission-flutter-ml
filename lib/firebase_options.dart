@@ -65,4 +65,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'submission-flutter-ml.firebasestorage.app',
     iosBundleId: 'com.example.submissionFlutterMl',
   );
+
 }
