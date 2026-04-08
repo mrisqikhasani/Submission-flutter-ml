@@ -1,12 +1,20 @@
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:submission_flutter_ml/services/image_recognizer_services.dart';
 import 'package:submission_flutter_ml/ui/result_page.dart';
 // import 'package:submission_flutter_ml/ui/camera_page.dart';
 
 class HomeController extends ChangeNotifier {
+  final ImageRecognizerServices _services;
+
+  HomeController(this._services) {
+    _services.initialize();
+  }
+
   final ImagePicker _picker = ImagePicker();
 
   File? _image;
@@ -124,14 +132,49 @@ class HomeController extends ChangeNotifier {
   // ======================
   // NAVIGATION
   // ======================
-  void goToResultPage(BuildContext context) {
+  Future<void> goToResultPage(BuildContext context) async {
     if (_image == null) return;
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ResultPage(imagePath: _image!.path),
-      ),
-    );
+    try {
+      _setLoading(true);
+      _setError(null);
+
+      // 1. Jalankan Isolate Inference lewat service
+      final results = await _services.recognizeFile(_image!);
+
+      if (results.isEmpty) {
+        _setError("Makanan tidak terdeteksi. Coba foto lebih jelas.");
+        return;
+      }
+
+      // 2. LOGIKA: Mencari skor tertinggi (Best Practice: Olah di Controller)
+      final sorted = results.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+      final topResult = sorted.first;
+      final String label = topResult.key; // Ambil Nama Makanan
+      final double score = topResult.value; // Ambil Confidence Score
+
+      log('Best Result: $label with score $score');
+
+      // 3. Navigasi: Kirim variabel label dan score saja ke ResultPage
+      if (context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ResultPage(
+              imagePath: _image!.path,
+              labelResult: label,
+              scoreResult: score,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      log("Error during navigation logic: $e");
+      _setError("Gagal menganalisis gambar: $e");
+    } finally {
+      _setLoading(false);
+    }
   }
 }
