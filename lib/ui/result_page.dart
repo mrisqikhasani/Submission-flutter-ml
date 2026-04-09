@@ -1,8 +1,8 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:submission_flutter_ml/controller/home_controller.dart';
+import 'package:submission_flutter_ml/controller/detail_controller.dart';
+import 'package:submission_flutter_ml/controller/result_controller.dart';
 import 'package:submission_flutter_ml/model/nutrition_model.dart';
 import 'package:submission_flutter_ml/widget/classification_item.dart';
 
@@ -55,72 +55,118 @@ class _ResultBodyState extends State<_ResultBody> {
   @override
   void initState() {
     super.initState();
+    // Ambil data referensi dari MealDB API segera setelah halaman dimuat
     Future.microtask(() {
-      // todo-02: run the inference model based on user picture
+      context.read<DetailController>().fetchMealDetail(widget.labelResult);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final String displayScore =
-        "${(widget.scoreResult * 100).toStringAsFixed(2)}%";
+    final String displayScore = "${(widget.scoreResult * 100).toStringAsFixed(2)}%";
+    final detailController = context.watch<DetailController>();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 8,
-      children: [
-        Expanded(
-          child: Center(
+    return SingleChildScrollView( // Tambahkan scroll agar tidak overflow
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Gambar Hasil Foto User
+          SizedBox(
+            height: 300,
             child: Image.file(File(widget.imagePath), fit: BoxFit.cover),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16.0),
-          // todo-03: show the inference result (food name and the confidence score)
-          child: ClassificatioinItem(
-            item: widget.labelResult,
-            value: displayScore,
+          
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16.0),
+            child: ClassificatioinItem(
+              item: widget.labelResult,
+              value: displayScore,
+            ),
           ),
-        ),
-        const Divider(),
-        Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              context.watch<HomeController>().isNutritionLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _buildNutritionTable(
-                      context.watch<HomeController>().nutritionResult,
-                    ),
-            ],
+          
+          const Divider(),
+          
+          // 2. Tabel Nutrisi (Gemini)
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: context.watch<ResultController>().isNutritionLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _buildNutritionTable(context.watch<ResultController>().nutritionResult),
           ),
-        ),
-        const Divider(),
-        FilledButton.tonal(
-          onPressed: () {
-            context.read<HomeController>().goToDetailPage(
-              context,
-              widget.labelResult,
-            );
-          },
-          child: const Text("Detail"),
-        ),
-      ],
+          
+          const Divider(),
+
+          // 3. SEKSI REFERENCE (Sesuai Gambar)
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Reference",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                
+                // Tampilan List Tile untuk Reference
+                InkWell(
+                  onTap: () {
+                    detailController.goToDetailPage(context, widget.labelResult);
+                  },
+                  child: detailController.isDetailLoading
+                      ? const LinearProgressIndicator()
+                      : Row(
+                          children: [
+                            // Gambar kecil dari API MealDB
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: detailController.mealDetail?.strMealThumb != null
+                                  ? Image.network(
+                                      detailController.mealDetail!.strMealThumb,
+                                      width: 60,
+                                      height: 60,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Container(
+                                      width: 60,
+                                      height: 60,
+                                      color: Colors.grey[300],
+                                      child: const Icon(Icons.fastfood),
+                                    ),
+                            ),
+                            const SizedBox(width: 16),
+                            // Nama Makanan dari API
+                            Expanded(
+                              child: Text(
+                                detailController.mealDetail?.strMeal ?? widget.labelResult,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
     );
   }
 
   Widget _buildNutritionTable(NutritionData? data) {
-    if (data == null) {
-      return const Text("Data nutrisi tidak tersedia saat ini.");
-    }
+    if (data == null) return const Text("Data nutrisi tidak tersedia.");
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withOpacity(0.05),
+        color: Colors.deepPurple.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurple.withOpacity(0.1)),
+        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.1)),
       ),
       child: Column(
         children: [
@@ -145,13 +191,7 @@ class _ResultBodyState extends State<_ResultBody> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.deepPurple,
-            ),
-          ),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
         ],
       ),
     );

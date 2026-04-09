@@ -1,58 +1,34 @@
 import 'dart:developer';
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
-import 'package:submission_flutter_ml/model/meal_model.dart';
-import 'package:submission_flutter_ml/model/nutrition_model.dart';
-import 'package:submission_flutter_ml/services/gemini_services.dart';
-import 'package:submission_flutter_ml/services/http_service.dart';
-import 'package:submission_flutter_ml/services/image_recognizer_services.dart';
-import 'package:submission_flutter_ml/ui/detail_page.dart';
-import 'package:submission_flutter_ml/ui/result_page.dart';
-// import 'package:submission_flutter_ml/ui/camera_page.dart';
+import 'package:provider/provider.dart';
+
+import '../services/image_recognizer_services.dart';
+import '../ui/camera_page.dart';
+import '../ui/result_page.dart';
+import 'result_controller.dart';
 
 class HomeController extends ChangeNotifier {
-  final ImageRecognizerServices _services;
-  final HttpService _httpService;
-  final GeminiServices _geminiServices;
+  final ImageRecognizerServices _recognizerServices;
 
-
-  HomeController(this._services, this._httpService, this._geminiServices) {
-    _services.initialize();
+  HomeController(
+    this._recognizerServices,
+  ) {
+    _recognizerServices.initialize();
   }
 
   final ImagePicker _picker = ImagePicker();
 
   File? _image;
-  bool _isLoading = false;
-  String? _error;
-
   File? get image => _image;
+
+  bool _isLoading = false;
   bool get isLoading => _isLoading;
+
+  String? _error;
   String? get error => _error;
-
-  MealModel? _mealDetail;
-  bool _isDetailLoading = false;
-
-  MealModel? get mealDetail => _mealDetail;
-  bool get isDetailLoading => _isDetailLoading;
-
-  // gemini nutrions
-  NutritionData? _nutritionResult;
-  bool _isNutritionLoading = false;
-
-  NutritionData? get nutritionResult => _nutritionResult;
-  bool get isNutritionLoading => _isNutritionLoading;
-
-  // ======================
-  // STATE
-  // ======================
-  void _setImage(File file) {
-    _image = file;
-    notifyListeners();
-  }
 
   void _setLoading(bool value) {
     _isLoading = value;
@@ -69,68 +45,28 @@ class HomeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ======================
-  // IMAGE PICKER
-  // ======================
-  Future<void> pickFromGallery() async {
+  Future<void> pickFromGallery() async => _pickImage(ImageSource.gallery);
+  Future<void> pickFromCamera() async => _pickImage(ImageSource.camera);
+
+  Future<void> _pickImage(ImageSource source) async {
     try {
       _setLoading(true);
-
-      final picked = await _picker.pickImage(source: ImageSource.gallery);
-
+      final picked = await _picker.pickImage(source: source);
       if (picked != null) {
-        await _handleImage(File(picked.path));
+        await _handleImagePipeline(File(picked.path));
       }
     } catch (e) {
-      _setError("Failed to pick image");
+      _setError("Gagal mengambil gambar: $e");
     } finally {
       _setLoading(false);
     }
   }
 
-  Future<void> pickFromCamera() async {
-    try {
-      _setLoading(true);
-
-      final picked = await _picker.pickImage(source: ImageSource.camera);
-
-      if (picked != null) {
-        await _handleImage(File(picked.path));
-      }
-    } catch (e) {
-      _setError("Failed to open camera");
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  // ======================
-  // CUSTOM CAMERA (🔥 4 PTS)
-  // ======================
-  // Future<void> openCustomCamera(BuildContext context) async {
-  //   final XFile? result = await Navigator.push(
-  //     context,
-  //     MaterialPageRoute(builder: (_) => const CameraPage()),
-  //   );
-
-  //   if (result != null) {
-  //     await _handleImage(File(result.path));
-  //   }
-  // }
-
-  // ======================
-  // IMAGE PIPELINE
-  // ======================
-  Future<void> _handleImage(File file) async {
+  Future<void> _handleImagePipeline(File file) async {
     resetState();
-
     final cropped = await _cropImage(file);
-
-    if (cropped != null) {
-      _setImage(cropped);
-    } else {
-      _setImage(file);
-    }
+    _image = cropped ?? file;
+    notifyListeners();
   }
 
   Future<File?> _cropImage(File file) async {
@@ -146,13 +82,22 @@ class HomeController extends ChangeNotifier {
         IOSUiSettings(title: 'Crop Image'),
       ],
     );
-
     return cropped != null ? File(cropped.path) : null;
   }
 
-  // ======================
-  // NAVIGATION
-  // ======================
+  
+  Future<void> openCustomCamera(BuildContext context) async {
+    final XFile? capturedFile = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CameraPage()),
+    );
+
+    if (capturedFile != null) {
+      await _handleImagePipeline(File(capturedFile.path));
+      if (context.mounted) goToResultPage(context);
+    }
+  }
+
   Future<void> goToResultPage(BuildContext context) async {
     if (_image == null) return;
 
@@ -160,81 +105,41 @@ class HomeController extends ChangeNotifier {
       _setLoading(true);
       _setError(null);
 
-      final results = await _services.recognizeFile(_image!);
+      // 1. TFLite Classification
+      if (!_recognizerServices.isInitialized) await _recognizerServices.initialize();
+      final results = await _recognizerServices.recognizeFile(_image!);
 
       if (results.isEmpty) {
-        _setError("Makanan tidak terdeteksi. Coba foto lebih jelas.");
+        _setError("Makanan tidak terdeteksi.");
         return;
       }
 
-      final sorted = results.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
+      final topResult = (results.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).first;
 
-      final topResult = sorted.first;
-      final String label = topResult.key; 
-      final double score = topResult.value;
+      // 2. Gemini Nutrition Analysis
+      if (context.mounted) {
+        await context.read<ResultController>().analyzeNutrition(topResult.key);
+      }
 
-      _isNutritionLoading = true;
-      _nutritionResult = null;
-      notifyListeners();
-
-      final nutritionResult = await _geminiServices.getNutritionValue(label);
-      _nutritionResult = nutritionResult;
-      _isNutritionLoading = false;
-      notifyListeners();
-
+      // 3. Navigation
       if (context.mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => ResultPage(
               imagePath: _image!.path,
-              labelResult: label,
-              scoreResult: score,
+              labelResult: topResult.key,
+              scoreResult: topResult.value,
             ),
           ),
         );
       }
     } catch (e) {
-      log("Error during navigation logic: $e");
-      _setError("Gagal menganalisis gambar: $e");
+      log("Navigation Error: $e");
+      _setError("Gagal menganalisis: $e");
     } finally {
       _setLoading(false);
-      _isNutritionLoading = false;
       notifyListeners();
     }
   }
-
-  Future<void> fetchMealDetail(String mealName) async {
-    try {
-      _isDetailLoading = true;
-      _mealDetail = null; // Reset data lama
-      notifyListeners();
-
-      final result = await _httpService.searchMealByName(mealName);
-      _mealDetail = result;
-    } catch (e) {
-      log("Error fetching detail: $e");
-    } finally {
-      _isDetailLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> goToDetailPage(BuildContext context, String foodName) async {
-  
-    await fetchMealDetail(foodName);
-  
-    if(context.mounted){
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => DetailPage(),
-        ),
-      );
-    }
-  }
-
-
-  // gemini controller
 }

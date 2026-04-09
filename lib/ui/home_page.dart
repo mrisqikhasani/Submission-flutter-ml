@@ -35,7 +35,6 @@ class _HomeBody extends StatelessWidget {
           child: Center(
             child: GestureDetector(
               onTap: () {
-                // todo-01: tap this icon to open image picker feature
               },
               child: Align(
                 alignment: Alignment.center,
@@ -52,24 +51,61 @@ class _HomeBody extends StatelessWidget {
             ),
           ),
         ),
-        Row(
-          spacing: 8,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            FilledButton.tonal(
-              onPressed: () {
-                context.read<HomeController>().pickFromGallery();
-              },
-              child: const Text("Gallery"),
-            ),
-          ],
-        ),
-        FilledButton.tonal(
-          onPressed: () {
-            context.read<HomeController>().goToResultPage(context);
+        Consumer<HomeController>(
+          builder: (context, controller, _) {
+            return Row(
+              spacing: 8,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                FilledButton.tonal(
+                  onPressed: () {
+                    controller.pickFromGallery();
+                  },
+                  child: const Text("Gallery"),
+                ),
+                
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: controller.isLoading
+                        ? null
+                        : () => controller.openCustomCamera(
+                            context,
+                          ), 
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text("Custom Camera"),
+                  ),
+                ),
+              ],
+            );
           },
-          child: const Text("Analyze"),
+        ),
+        const SizedBox(height: 12),
+
+        Consumer<HomeController>(
+          builder: (context, controller, _) {
+            return FilledButton.tonal(
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              onPressed: (controller.image == null || controller.isLoading)
+                  ? null
+                  : () => controller.goToResultPage(context),
+              child: controller.isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      "Analyze",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+            );
+          },
         ),
       ],
     );

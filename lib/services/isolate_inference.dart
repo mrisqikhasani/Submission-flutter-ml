@@ -101,11 +101,9 @@ class IsolateInference {
     File imageFile,
     List<int> inputShape,
   ) {
-    // Baca file sebagai bytes
     final bytes = imageFile.readAsBytesSync();
     image_lib.Image? img = image_lib.decodeImage(bytes);
 
-    // Resize ke ukuran yang diminta model ML
     image_lib.Image imageInput = image_lib.copyResize(
       img!,
       width: inputShape[1],
@@ -138,7 +136,6 @@ class IsolateInference {
   }
 }
 
-// todo-03-isolate-01: create a model class
 class InferenceModel {
   CameraImage? cameraImage;
   File? imageFile;

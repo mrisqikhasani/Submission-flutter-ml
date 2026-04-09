@@ -6,7 +6,7 @@ class FirebaseMlService {
  Future<File> loadModel() async {
    final instance = FirebaseModelDownloader.instance;
    final model = await instance.getModel(
-     "House-Price-Predictor", // Load model name from firebase
+     "vision-classifier-food-v1", 
      FirebaseModelDownloadType.localModel,
      FirebaseModelDownloadConditions(
        iosAllowsCellularAccess: true,

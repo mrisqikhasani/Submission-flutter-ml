@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:submission_flutter_ml/controller/home_controller.dart';
+import 'package:submission_flutter_ml/controller/detail_controller.dart';
 
 class DetailPage extends StatelessWidget {
   const DetailPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<HomeController>();
+    final controller = context.watch<DetailController>();
 
     return Scaffold(
       appBar: AppBar(
@@ -20,7 +20,7 @@ class DetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildBody(BuildContext context, HomeController controller) {
+  Widget _buildBody(BuildContext context, DetailController controller) {
     if (controller.isDetailLoading) {
       return const Center(child: CircularProgressIndicator());
     }
